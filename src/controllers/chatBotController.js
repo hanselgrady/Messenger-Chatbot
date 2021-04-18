@@ -1,4 +1,5 @@
 import "dotenv";
+import e from "express";
 import request from "request";
 
 let postWebHook = (req, res) => {
@@ -55,11 +56,25 @@ let getWebHook = (req, res) => {
     }
 };
 
+let data = {
+    "name": null,
+    "birth": null
+};
+let hasAsked = {
+    "name": false,
+    "birth": false,
+    "request": false,
+    "nextbday": false,
+    "response": false,
+};
 let start = false;
-let state = 1;
+
+const nameRegex = "^[\\p{L} .'-]+$";
+const dateRegex = "^\d{4}\-(0[1-9]|1[012])\-(0[1-9]|[12][0-9]|3[01])$";
 
 // Handles messages events
 function handleMessage(sender_psid, received_message) {
+    let curr = new Date();
     let response;
     // Check if the message contains text
     if (received_message.text) {    
@@ -67,44 +82,74 @@ function handleMessage(sender_psid, received_message) {
         if (!start) {
             response = {"text": `Hi! Let's start with first question.`};
             callSendAPI(sender_psid, response);
-            start = true;
-            response = {"text": `What's your name?`};
-            state = 1;
         }
         else {
-            if (state == 1) {
-                response = {"text": `When is your birthday?`};
-                state = 2;
+            if (!hasAsked.name) {
+                response = {"text": `What is your name?`};
+                hasAsked.name = true;
             }
-            else if (state == 2) {
-                response = {"text": `That's great! Now you can ask me about your how many days until yournext birthday.`};
-                state = 3;
+            else if (!hasAsked.birth) {
+                if (nameRegex.test(received_message.text)) {
+                    data.name = received_message.text;
+                    response = {"text": `When is your birth date?`};
+                    hasAsked.birth = true;
+                }
+                else {
+                    response = {"text": `Name invalid. Try again.`};
+                }
             }
-            else if (state == 3) {
-                response = {
-                    "attachment": {
-                        "type": "template",
-                        "payload": {
-                            "template_type": "generic",
-                            "elements": [{
-                                "title": `Is there 5 days before your next birthday?`,
-                                "subtitle": `Tap a button to answer`,
-                                "buttons": [
-                                    {
-                                        "type": "postback",
-                                        "title": "Yes",
-                                        "payload": "yes"
-                                    },
-                                    {
-                                        "type": "postback",
-                                        "title": "No",
-                                        "payload": "no"
-                                    }
-                                ]
-                            }]
+            else if (!hasAsked.request) {
+                if (dateRegex.test(received_message.text)) {
+                    var splitData = received_message.text.split('-');
+                    data.birth = new Date(splitData[0], splitData[1] - 1, splitData[2]);
+                    response = {"text": `Thanks. You can ask about your next birthday now.`};
+                    hasAsked.request = true;
+                }
+                else {
+                    response = {"text": `Birth date invalid. Try again.`};
+                }
+            }
+            else if (!hasAsked.nextbday) {
+                var rem = getRemainingDays();
+                if (received_message.text.includes("birthday") && received_message.text.includes("next")) {
+                    response = {
+                        "attachment": {
+                            "type": "template",
+                            "payload": {
+                                "template_type": "generic",
+                                "elements": [{
+                                    "title": `Is there ${rem} days before your next birthday?`,
+                                    "subtitle": `Tap a button to answer`,
+                                    "buttons": [
+                                        {
+                                            "type": "postback",
+                                            "title": "Yes",
+                                            "payload": "yes"
+                                        },
+                                        {
+                                            "type": "postback",
+                                            "title": "No",
+                                            "payload": "no"
+                                        }
+                                    ]
+                                }]
+                            }
                         }
-                    }
-                };
+                    };
+                    hasAsked.nextbday = true;
+                }
+                else {
+                    response = {"text": `Sorry, I don't understand. Please try again.`};
+                }
+            }
+            else if (!hasAsked.response) {
+                if (received_message.text.includes("n") || received_message.text === "wrong" || received_message.text === "false") {
+                    response = { "text": `There are 5 days before your next birthday` };
+                }
+                else if (received_message.text.includes("n") || received_message.text === "right" || received_message.text === "true") {
+                    response = { "text": `Goodbye` };
+                }
+                resetState();
             }
         }
     }
@@ -115,17 +160,45 @@ function handleMessage(sender_psid, received_message) {
     callSendAPI(sender_psid, response);    
 }
 
+function resetState() {
+    data = {
+        "name": null,
+        "birth": null
+    };
+    hasAsked = {
+        "name": false,
+        "birth": false,
+        "request": false,
+        "nextbday": false,
+        "response": false,
+    };
+    start = false;
+}
+
+function getRemainingDays() {
+    var today = new Date();
+    var nextBday = new Date(data.birth);
+    nextBday.setFullYear(today.getFullYear());
+    if (nextBday - today < 0) {
+        nextBday.setFullYear(today.getFullYear() + 1);
+    }
+    var diffTime = nextBday - today;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
 // Handles messaging_postbacks events
 function handlePostback(sender_psid, received_postback) {
     let response;
     // Get the payload for the postback
     let payload = received_postback.payload;
     // Set the response based on the postback payload
+    var rem = getRemainingDays();
     if (payload === 'yes') {
-        response = { "text": "Thanks!" }
+        response = { "text": `There are ${rem} days before your next birthday` };
     } else if (payload === 'no') {
-        response = { "text": "Oops, try sending another image." }
+        response = { "text": `Goodbye` };
     }
+    resetState();
     // Send the message to acknowledge the postback
     callSendAPI(sender_psid, response);
 }
