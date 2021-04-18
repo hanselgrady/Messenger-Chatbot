@@ -1,6 +1,8 @@
 import "dotenv";
-import e from "express";
+// import express from "express";
 import request from "request";
+
+let chatContainer = [];
 
 let postWebHook = (req, res) => {
     // Parse the request body from the POST
@@ -82,20 +84,25 @@ function handleMessage(sender_psid, received_message) {
         if (!start) {
             response = {"text": `Hi! Let's start with first question.`};
             callSendAPI(sender_psid, response);
+            start = true;
+            chatContainer.push(`Hi! Let's start with first question.`);
         }
         else {
             if (!hasAsked.name) {
                 response = {"text": `What is your name?`};
                 hasAsked.name = true;
+                chatContainer.push(`What is your name?`);
             }
             else if (!hasAsked.birth) {
                 if (nameRegex.test(received_message.text)) {
                     data.name = received_message.text;
                     response = {"text": `When is your birth date?`};
                     hasAsked.birth = true;
+                    chatContainer.push( `When is your birth date?`);
                 }
                 else {
                     response = {"text": `Name invalid. Try again.`};
+                    chatContainer.push(`Name invalid. Try again.`);
                 }
             }
             else if (!hasAsked.request) {
@@ -104,9 +111,11 @@ function handleMessage(sender_psid, received_message) {
                     data.birth = new Date(splitData[0], splitData[1] - 1, splitData[2]);
                     response = {"text": `Thanks. You can ask about your next birthday now.`};
                     hasAsked.request = true;
+                    chatContainer.push(`Thanks. You can ask about your next birthday now.`);
                 }
                 else {
                     response = {"text": `Birth date invalid. Try again.`};
+                    chatContainer.push(`Birth date invalid. Try again.`);
                 }
             }
             else if (!hasAsked.nextbday) {
@@ -137,17 +146,21 @@ function handleMessage(sender_psid, received_message) {
                         }
                     };
                     hasAsked.nextbday = true;
+                    chatContainer.push(`Is there ${rem} days before your next birthday?`);
                 }
                 else {
                     response = {"text": `Sorry, I don't understand. Please try again.`};
+                    chatContainer.push(`Sorry, I don't understand. Please try again.`);
                 }
             }
             else if (!hasAsked.response) {
                 if (received_message.text.includes("n") || received_message.text === "wrong" || received_message.text === "false") {
                     response = { "text": `There are 5 days before your next birthday` };
+                    chatContainer.push(`There are 5 days before your next birthday`);
                 }
                 else if (received_message.text.includes("n") || received_message.text === "right" || received_message.text === "true") {
                     response = { "text": `Goodbye` };
+                    chatContainer.push(`Goodbye`);
                 }
                 resetState();
             }
@@ -155,6 +168,7 @@ function handleMessage(sender_psid, received_message) {
     }
     else {
         response = {"text": `Sorry, I only accept text (and button) input.`};
+        chatContainer.push(`Sorry, I only accept text (and button) input.`);
     }
     // Sends the response message
     callSendAPI(sender_psid, response);    
@@ -195,8 +209,10 @@ function handlePostback(sender_psid, received_postback) {
     var rem = getRemainingDays();
     if (payload === 'yes') {
         response = { "text": `There are ${rem} days before your next birthday` };
+        chatContainer.push(`There are ${rem} days before your next birthday`);
     } else if (payload === 'no') {
         response = { "text": `Goodbye` };
+        chatContainer.push(`Goodbye`);
     }
     resetState();
     // Send the message to acknowledge the postback
@@ -230,5 +246,6 @@ function callSendAPI(sender_psid, response) {
 
 export const cbcontroller = {
     postWebhook: postWebHook,
-    getWebhook: getWebHook
+    getWebhook: getWebHook,
+    chatLog: chatContainer
 };
