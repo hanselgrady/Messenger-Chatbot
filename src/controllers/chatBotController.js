@@ -55,23 +55,79 @@ let getWebHook = (req, res) => {
     }
 };
 
+let start = false;
+let state = 1;
+
 // Handles messages events
 function handleMessage(sender_psid, received_message) {
     let response;
     // Check if the message contains text
     if (received_message.text) {    
         // Create the payload for a basic text message
-        response = {
-            "text": `You sent the message: "${received_message.text}". Now send me an image!`
+        if (!start) {
+            response = {"text": `Hi! Let's start with first question.`};
+            callSendAPI(sender_psid, response);
+            start = true;
+            response = {"text": `What's your name?`};
+            state = 1;
         }
-    } 
+        else {
+            if (state == 1) {
+                response = {"text": `When is your birthday?`};
+                state = 2;
+            }
+            else if (state == 2) {
+                response = {"text": `That's great! Now you can ask me about your how many days until yournext birthday.`};
+                state = 3;
+            }
+            else if (state == 3) {
+                response = {
+                    "attachment": {
+                        "type": "template",
+                        "payload": {
+                            "template_type": "generic",
+                            "elements": [{
+                                "title": `Is there 5 days before your next birthday?`,
+                                "subtitle": `Tap a button to answer`,
+                                "buttons": [
+                                    {
+                                        "type": "postback",
+                                        "title": "Yes",
+                                        "payload": "yes"
+                                    },
+                                    {
+                                        "type": "postback",
+                                        "title": "No",
+                                        "payload": "no"
+                                    }
+                                ]
+                            }]
+                        }
+                    }
+                };
+            }
+        }
+    }
+    else {
+        response = {"text": `Sorry, I only accept text (and button) input.`};
+    }
     // Sends the response message
     callSendAPI(sender_psid, response);    
 }
 
 // Handles messaging_postbacks events
 function handlePostback(sender_psid, received_postback) {
-
+    let response;
+    // Get the payload for the postback
+    let payload = received_postback.payload;
+    // Set the response based on the postback payload
+    if (payload === 'yes') {
+        response = { "text": "Thanks!" }
+    } else if (payload === 'no') {
+        response = { "text": "Oops, try sending another image." }
+    }
+    // Send the message to acknowledge the postback
+    callSendAPI(sender_psid, response);
 }
 
 // Sends response messages via the Send API
